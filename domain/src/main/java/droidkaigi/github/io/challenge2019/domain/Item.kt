@@ -1,4 +1,4 @@
-package droidkaigi.github.io.challenge2019.data.api.response
+package droidkaigi.github.io.challenge2019.domain
 
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass

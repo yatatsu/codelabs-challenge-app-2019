@@ -16,7 +16,7 @@ import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import com.squareup.moshi.Types
 import droidkaigi.github.io.challenge2019.data.api.HackerNewsApi
-import droidkaigi.github.io.challenge2019.data.api.response.Item
+import droidkaigi.github.io.challenge2019.domain.Item
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response

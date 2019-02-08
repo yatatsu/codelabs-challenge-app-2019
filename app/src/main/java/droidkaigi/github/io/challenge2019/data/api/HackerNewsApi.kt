@@ -1,7 +1,7 @@
 package droidkaigi.github.io.challenge2019.data.api
 
-import droidkaigi.github.io.challenge2019.data.api.response.Item
-import droidkaigi.github.io.challenge2019.data.api.response.User
+import droidkaigi.github.io.challenge2019.domain.Item
+import droidkaigi.github.io.challenge2019.domain.User
 import retrofit2.Call
 import retrofit2.http.GET
 import retrofit2.http.Path
