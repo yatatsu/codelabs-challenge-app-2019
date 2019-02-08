@@ -14,7 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
-import com.squareup.moshi.Types
+import com.squareup.moshi.JsonAdapter
 import droidkaigi.github.io.challenge2019.data.api.HackerNewsApi
 import droidkaigi.github.io.challenge2019.domain.Item
 import retrofit2.Call
@@ -22,6 +22,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import javax.inject.Inject
 
 class StoryActivity : BaseActivity() {
 
@@ -36,13 +37,16 @@ class StoryActivity : BaseActivity() {
     private lateinit var progressView: ProgressBar
 
     private lateinit var commentAdapter: CommentAdapter
-    private lateinit var hackerNewsApi: HackerNewsApi
+
+    @Inject
+    lateinit var hackerNewsApi: HackerNewsApi
+    @Inject
+    lateinit var itemJsonAdapter: JsonAdapter<Item>
+    @Inject
+    lateinit var itemsJsonAdapter: JsonAdapter<List<Item?>>
 
     private var getCommentsTask: AsyncTask<Long, Unit, List<Item?>>? = null
     private var hideProgressTask: AsyncTask<Unit, Unit, Unit>? = null
-    private val itemJsonAdapter = moshi.adapter(Item::class.java)
-    private val itemsJsonAdapter =
-        moshi.adapter<List<Item?>>(Types.newParameterizedType(List::class.java, Item::class.java))
 
     private var item: Item? = null
 
@@ -52,6 +56,7 @@ class StoryActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appComponent.inject(this)
         webView = findViewById(R.id.web_view)
         recyclerView = findViewById(R.id.comment_recycler)
         progressView = findViewById(R.id.progress)
@@ -59,10 +64,6 @@ class StoryActivity : BaseActivity() {
         item = intent.getStringExtra(EXTRA_ITEM_JSON)?.let {
             itemJsonAdapter.fromJson(it)
         }
-
-        val retrofit = createRetrofit("https://hacker-news.firebaseio.com/v0/")
-
-        hackerNewsApi = retrofit.create(HackerNewsApi::class.java)
 
         recyclerView.isNestedScrollingEnabled = false
         val itemDecoration = DividerItemDecoration(recyclerView.context, DividerItemDecoration.VERTICAL)

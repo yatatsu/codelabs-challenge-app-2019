@@ -14,16 +14,16 @@ import android.support.v7.widget.RecyclerView
 import android.view.MenuItem
 import android.view.View
 import android.widget.ProgressBar
-import com.squareup.moshi.Types
+import com.squareup.moshi.JsonAdapter
 import droidkaigi.github.io.challenge2019.data.api.HackerNewsApi
-import droidkaigi.github.io.challenge2019.domain.Item
 import droidkaigi.github.io.challenge2019.data.db.ArticlePreferences
-import droidkaigi.github.io.challenge2019.data.db.ArticlePreferences.Companion.saveArticleIds
+import droidkaigi.github.io.challenge2019.domain.Item
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
+import javax.inject.Inject
 
 class MainActivity : BaseActivity() {
 
@@ -36,13 +36,17 @@ class MainActivity : BaseActivity() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
 
     private lateinit var storyAdapter: StoryAdapter
-    private lateinit var hackerNewsApi: HackerNewsApi
+
+    @Inject
+    lateinit var hackerNewsApi: HackerNewsApi
+    @Inject
+    lateinit var articlePreferences: ArticlePreferences
+    @Inject
+    lateinit var itemJsonAdapter: JsonAdapter<Item>
+    @Inject
+    lateinit var itemsJsonAdapter: JsonAdapter<List<Item?>>
 
     private var getStoriesTask: AsyncTask<Long, Unit, List<Item?>>? = null
-    private val itemJsonAdapter = moshi.adapter(Item::class.java)
-    private val itemsJsonAdapter =
-        moshi.adapter<List<Item?>>(Types.newParameterizedType(List::class.java, Item::class.java))
-
 
     override fun getContentView(): Int {
         return R.layout.activity_main
@@ -50,13 +54,10 @@ class MainActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appComponent.inject(this)
         recyclerView = findViewById(R.id.item_recycler)
         progressView = findViewById(R.id.progress)
         swipeRefreshLayout = findViewById(R.id.swipe_refresh)
-
-        val retrofit = createRetrofit("https://hacker-news.firebaseio.com/v0/")
-
-        hackerNewsApi = retrofit.create(HackerNewsApi::class.java)
 
         val itemDecoration = DividerItemDecoration(recyclerView.context, DividerItemDecoration.VERTICAL)
         recyclerView.addItemDecoration(itemDecoration)
@@ -84,7 +85,7 @@ class MainActivity : BaseActivity() {
 
                                     storyAdapter.stories[index] = newItem
                                     runOnUiThread {
-                                        storyAdapter.alreadyReadStories = ArticlePreferences.getArticleIds(this@MainActivity)
+                                        storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
                                         storyAdapter.notifyItemChanged(index)
                                     }
                                 }
@@ -97,7 +98,7 @@ class MainActivity : BaseActivity() {
                     }
                 }
             },
-            alreadyReadStories = ArticlePreferences.getArticleIds(this)
+            alreadyReadStories = articlePreferences.getArticleIds()
         )
         recyclerView.adapter = storyAdapter
 
@@ -111,7 +112,7 @@ class MainActivity : BaseActivity() {
 
         if (savedStories != null) {
             storyAdapter.stories = savedStories.toMutableList()
-            storyAdapter.alreadyReadStories = ArticlePreferences.getArticleIds(this@MainActivity)
+            storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
             storyAdapter.notifyDataSetChanged()
             return
         }
@@ -162,7 +163,7 @@ class MainActivity : BaseActivity() {
                             progressView.visibility = View.GONE
                             swipeRefreshLayout.isRefreshing = false
                             storyAdapter.stories = items.toMutableList()
-                            storyAdapter.alreadyReadStories = ArticlePreferences.getArticleIds(this@MainActivity)
+                            storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
                             storyAdapter.notifyDataSetChanged()
                         }
                     }
@@ -182,8 +183,8 @@ class MainActivity : BaseActivity() {
             Activity.RESULT_OK -> {
                 data?.getLongExtra(StoryActivity.READ_ARTICLE_ID, 0L)?.let { id ->
                     if (id != 0L) {
-                        saveArticleIds(this, id.toString())
-                        storyAdapter.alreadyReadStories = ArticlePreferences.getArticleIds(this)
+                        articlePreferences.saveArticleIds(id.toString())
+                        storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
                         storyAdapter.notifyDataSetChanged()
                     }
                 }

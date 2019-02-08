@@ -1,26 +1,27 @@
 package droidkaigi.github.io.challenge2019.data.db
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.preference.PreferenceManager
 
-class ArticlePreferences {
+class ArticlePreferences(private val context: Context) {
+
+    private val preferences : SharedPreferences by lazy {  PreferenceManager.getDefaultSharedPreferences(context) }
 
     companion object {
         private const val ARTICLE_IDS_KEY = "article_ids_key"
+    }
 
-        fun saveArticleIds(context: Context, articleId: String) {
-            val p = PreferenceManager.getDefaultSharedPreferences(context)
-            val data = p.getStringSet(ARTICLE_IDS_KEY, mutableSetOf()) ?: mutableSetOf()
-            val tmps = mutableSetOf<String>()
-            tmps.addAll(data)
-            tmps.add(articleId)
-            p.edit().putStringSet(ARTICLE_IDS_KEY, tmps).commit()
-        }
+    fun saveArticleIds(articleId: String) {
+        val data = preferences.getStringSet(ARTICLE_IDS_KEY, mutableSetOf()) ?: mutableSetOf()
+        val tmps = mutableSetOf<String>()
+        tmps.addAll(data)
+        tmps.add(articleId)
+        preferences.edit().putStringSet(ARTICLE_IDS_KEY, tmps).apply()
+    }
 
-        fun getArticleIds(context: Context): Set<String> {
-            val p = PreferenceManager.getDefaultSharedPreferences(context)
-            return p.getStringSet(ARTICLE_IDS_KEY, setOf()) ?: setOf()
-        }
+    fun getArticleIds(): Set<String> {
+        return preferences.getStringSet(ARTICLE_IDS_KEY, setOf()) ?: setOf()
     }
 
 }
