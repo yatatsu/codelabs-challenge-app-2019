@@ -128,14 +128,14 @@ class StoryActivity : AppCompatActivity(), CoroutineScope {
         }
         webView.loadUrl(item!!.url)
 
-        loadItems(item!!.kids, progressLatch)
+        loadComments(item!!, progressLatch)
     }
 
-    private fun loadItems(ids: List<Long>, progressLatch: CountDownLatch) {
+    private fun loadComments(item: Item, progressLatch: CountDownLatch) {
         launch {
             try {
                 val items = withContext(Dispatchers.Default) {
-                    itemRepository.getItems(ids)
+                    itemRepository.getComments(item)
                 }
                 commentAdapter.comments = items
                 commentAdapter.notifyDataSetChanged()

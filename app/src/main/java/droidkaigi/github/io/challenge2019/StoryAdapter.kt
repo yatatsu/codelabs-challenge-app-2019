@@ -9,7 +9,7 @@ import droidkaigi.github.io.challenge2019.databinding.ItemStoryBinding
 
 
 class StoryAdapter(
-    var stories: MutableList<Item?>,
+    var stories: List<Item?>,
     private val onClickItem: ((Item) -> Unit)? = null,
     private val onClickMenuItem: ((Item, Int) -> Unit)? = null,
     var alreadyReadStories: Set<String>

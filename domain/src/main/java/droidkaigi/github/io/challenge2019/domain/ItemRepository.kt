@@ -6,5 +6,5 @@ interface ItemRepository {
 
     suspend fun getTopStories(size: Int): List<Item>
 
-    suspend fun getItems(ids: List<Long>): List<Item>
+    suspend fun getComments(item: Item): List<Item>
 }

@@ -6,57 +6,51 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import androidx.appcompat.app.AppCompatActivity
-import androidx.recyclerview.widget.DividerItemDecoration
-import androidx.recyclerview.widget.RecyclerView
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.ProgressBar
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
+import androidx.lifecycle.ViewModelProviders
+import androidx.recyclerview.widget.DividerItemDecoration
+import androidx.recyclerview.widget.RecyclerView
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.squareup.moshi.JsonAdapter
 import droidkaigi.github.io.challenge2019.data.db.ArticlePreferences
 import droidkaigi.github.io.challenge2019.domain.Item
 import droidkaigi.github.io.challenge2019.domain.ItemRepository
-import kotlinx.coroutines.*
 import javax.inject.Inject
-import kotlin.coroutines.CoroutineContext
 
-class MainActivity : AppCompatActivity(), CoroutineScope {
-
-    private val job = Job()
-
-    override val coroutineContext: CoroutineContext
-        get() = Dispatchers.Main + job
+class MainActivity : AppCompatActivity() {
 
     companion object {
-        private const val STATE_STORIES = "stories"
         private const val ACTIVITY_REQUEST = 1
-        private const val SIZE_TOP_STORY_ITEMS = 20
     }
 
     private lateinit var recyclerView: RecyclerView
-    private lateinit var progressView: ProgressBar
-    private lateinit var swipeRefreshLayout: SwipeRefreshLayout
-
     private lateinit var storyAdapter: StoryAdapter
 
     @Inject
-    lateinit var articlePreferences: ArticlePreferences
-    @Inject
     lateinit var itemJsonAdapter: JsonAdapter<Item>
     @Inject
-    lateinit var itemsJsonAdapter: JsonAdapter<List<Item?>>
-    @Inject
     lateinit var itemRepository: ItemRepository
+    @Inject
+    lateinit var articlePreferences: ArticlePreferences
+
+    private val viewModel: MainViewModelType by lazy {
+        ViewModelProviders.of(
+            this, MainViewModel.Factory(articlePreferences, itemRepository)
+        ).get(MainViewModel::class.java)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         appComponent.inject(this)
         recyclerView = findViewById(R.id.item_recycler)
-        progressView = findViewById(R.id.progress)
-        swipeRefreshLayout = findViewById(R.id.swipe_refresh)
+        val progressView : ProgressBar = findViewById(R.id.progress)
+        val swipeRefreshLayout : SwipeRefreshLayout = findViewById(R.id.swipe_refresh)
 
         val itemDecoration = DividerItemDecoration(
             recyclerView.context,
@@ -78,69 +72,45 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
                         val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.primaryClip = ClipData.newPlainText("url", item.url)
                     }
-                    R.id.refresh -> {
-                        loadStory(item)
-                    }
+                    R.id.refresh -> viewModel.refresh(item)
                 }
             },
-            alreadyReadStories = articlePreferences.getArticleIds()
+            alreadyReadStories = viewModel.alreadyReadStories.value ?: setOf()
         )
         recyclerView.adapter = storyAdapter
 
-        swipeRefreshLayout.setOnRefreshListener { loadTopStories() }
+        swipeRefreshLayout.setOnRefreshListener { viewModel.refreshAll() }
 
-        val savedStories = savedInstanceState?.let { bundle ->
-            bundle.getString(STATE_STORIES)?.let { itemsJson ->
-                itemsJsonAdapter.fromJson(itemsJson)
-            }
-        }
-
-        if (savedStories != null) {
-            storyAdapter.stories = savedStories.toMutableList()
-            storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
-            storyAdapter.notifyDataSetChanged()
-            return
-        }
-
-        progressView.visibility = Util.setVisibility(true)
-        loadTopStories()
-    }
-
-    private fun loadTopStories() {
-        launch {
-            try {
-                val items = withContext(Dispatchers.Default) {
-                    itemRepository.getTopStories(SIZE_TOP_STORY_ITEMS)
-                }
+        viewModel.stories.observe(this, Observer { stories ->
+            stories?.let {
                 progressView.visibility = View.GONE
                 swipeRefreshLayout.isRefreshing = false
-                storyAdapter.stories = items.toMutableList()
-                storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
+                storyAdapter.stories = it
                 storyAdapter.notifyDataSetChanged()
-            } catch (e: Exception) {
-                showError(e) // TODO: error handling
             }
-        }
-    }
+        })
 
-    private fun loadStory(item: Item) {
-        launch {
-            try {
-                val newItem = withContext(Dispatchers.Default) {
-                    itemRepository.getItem(item.id)
-                }
-                val index = storyAdapter.stories.indexOf(item)
-                if (index > 0) {
-                    storyAdapter.stories[index] = newItem
-                    runOnUiThread {
-                        storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
-                        storyAdapter.notifyItemChanged(index)
-                    }
-                }
-            } catch (e: Exception) {
-                showError(e) // TODO: error handling
+        viewModel.alreadyReadStories.observe(this, Observer { ids ->
+            ids?.let {
+                storyAdapter.alreadyReadStories = it
+                storyAdapter.notifyDataSetChanged()
             }
-        }
+        })
+
+        viewModel.showableError.observe(this, Observer { t ->
+            t?.let {
+                showError(it)
+                viewModel.onErrorShown()
+            }
+        })
+
+        viewModel.progressBarVisibility.observe(this, Observer {
+            Util.setVisibility(it ?: false)
+        })
+
+        viewModel.refreshing.observe(this, Observer {
+            swipeRefreshLayout.isRefreshing = it ?: false
+        })
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -148,9 +118,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
             Activity.RESULT_OK -> {
                 data?.getLongExtra(StoryActivity.READ_ARTICLE_ID, 0L)?.let { id ->
                     if (id != 0L) {
-                        articlePreferences.saveArticleIds(id.toString())
-                        storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
-                        storyAdapter.notifyDataSetChanged()
+                        viewModel.markAsRead(id)
                     }
                 }
             }
@@ -161,8 +129,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     override fun onOptionsItemSelected(item: MenuItem?): Boolean {
         return when (item?.itemId) {
             R.id.refresh -> {
-                progressView.visibility = Util.setVisibility(true)
-                loadTopStories()
+                viewModel.refreshAll()
                 return true
             }
             R.id.exit -> {
@@ -176,18 +143,5 @@ class MainActivity : AppCompatActivity(), CoroutineScope {
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.activity_menu, menu)
         return true
-    }
-
-    override fun onSaveInstanceState(outState: Bundle?) {
-        outState?.apply {
-            putString(STATE_STORIES, itemsJsonAdapter.toJson(storyAdapter.stories))
-        }
-
-        super.onSaveInstanceState(outState)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        job.cancel()
     }
 }

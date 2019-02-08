@@ -17,12 +17,14 @@ class ApiItemRepository(
 
     override suspend fun getTopStories(size: Int): List<Item> {
         val ids = api.getTopStories().await().take(size)
-        return getItems(ids)
-    }
-
-    override suspend fun getItems(ids: List<Long>): List<Item> {
         return runBlocking {
             ids.map { async { api.getItem(it) } }.map { it.await() }
+        }.awaitAll()
+    }
+
+    override suspend fun getComments(item: Item): List<Item> {
+        return runBlocking {
+            item.kids.map { async { api.getItem(it) } }.map { it.await() }
         }.awaitAll()
     }
 }
