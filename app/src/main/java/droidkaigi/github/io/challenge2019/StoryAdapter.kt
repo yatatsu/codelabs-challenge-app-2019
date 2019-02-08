@@ -1,7 +1,7 @@
 package droidkaigi.github.io.challenge2019
 
-import android.support.v7.widget.PopupMenu
-import android.support.v7.widget.RecyclerView
+import androidx.appcompat.widget.PopupMenu
+import androidx.recyclerview.widget.RecyclerView
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import droidkaigi.github.io.challenge2019.domain.Item

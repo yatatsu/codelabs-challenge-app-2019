@@ -2,7 +2,7 @@ package droidkaigi.github.io.challenge2019
 
 import android.app.Application
 import android.content.Context
-import android.support.annotation.VisibleForTesting
+import androidx.annotation.VisibleForTesting
 import com.facebook.stetho.Stetho
 import droidkaigi.github.io.challenge2019.di.AppComponent
 import droidkaigi.github.io.challenge2019.di.AppModule
