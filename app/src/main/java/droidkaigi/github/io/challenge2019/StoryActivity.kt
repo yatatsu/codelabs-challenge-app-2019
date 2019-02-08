@@ -5,8 +5,10 @@ import android.app.Activity
 import android.content.Intent
 import android.os.AsyncTask
 import android.os.Bundle
+import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.DividerItemDecoration
 import android.support.v7.widget.RecyclerView
+import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.webkit.WebResourceError
@@ -24,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import javax.inject.Inject
 
-class StoryActivity : BaseActivity() {
+class StoryActivity : AppCompatActivity() {
 
     companion object {
         const val EXTRA_ITEM_JSON = "droidkaigi.github.io.challenge2019.EXTRA_ITEM_JSON"
@@ -50,12 +52,9 @@ class StoryActivity : BaseActivity() {
 
     private var item: Item? = null
 
-    override fun getContentView(): Int {
-        return R.layout.activity_story
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_story)
         appComponent.inject(this)
         webView = findViewById(R.id.web_view)
         recyclerView = findViewById(R.id.comment_recycler)
@@ -178,8 +177,17 @@ class StoryActivity : BaseActivity() {
                 finish()
                 return true
             }
+            R.id.exit -> {
+                this.finish()
+                return true
+            }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.activity_menu, menu)
+        return true
     }
 
     override fun onSaveInstanceState(outState: Bundle?) {

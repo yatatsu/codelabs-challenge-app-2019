@@ -9,8 +9,10 @@ import android.content.Intent
 import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v4.widget.SwipeRefreshLayout
+import android.support.v7.app.AppCompatActivity
 import android.support.v7.widget.DividerItemDecoration
 import android.support.v7.widget.RecyclerView
+import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import android.widget.ProgressBar
@@ -25,10 +27,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CountDownLatch
 import javax.inject.Inject
 
-class MainActivity : BaseActivity() {
+class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val STATE_STORIES = "stories"
+        private const val ACTIVITY_REQUEST = 1
     }
 
     private lateinit var recyclerView: RecyclerView
@@ -48,12 +51,9 @@ class MainActivity : BaseActivity() {
 
     private var getStoriesTask: AsyncTask<Long, Unit, List<Item?>>? = null
 
-    override fun getContentView(): Int {
-        return R.layout.activity_main
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
         appComponent.inject(this)
         recyclerView = findViewById(R.id.item_recycler)
         progressView = findViewById(R.id.progress)
@@ -68,7 +68,7 @@ class MainActivity : BaseActivity() {
                 val intent = Intent(this@MainActivity, StoryActivity::class.java).apply {
                     putExtra(StoryActivity.EXTRA_ITEM_JSON, itemJson)
                 }
-                startActivityForResult(intent)
+                startActivityForResult(intent, ACTIVITY_REQUEST)
             },
             onClickMenuItem = { item, menuItemId ->
                 when (menuItemId) {
@@ -200,8 +200,17 @@ class MainActivity : BaseActivity() {
                 loadTopStories()
                 return true
             }
+            R.id.exit -> {
+                this.finish()
+                return true
+            }
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.activity_menu, menu)
+        return true
     }
 
     override fun onSaveInstanceState(outState: Bundle?) {
