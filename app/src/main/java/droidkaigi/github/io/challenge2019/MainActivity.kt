@@ -1,12 +1,10 @@
 package droidkaigi.github.io.challenge2019
 
-import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.os.AsyncTask
 import android.os.Bundle
 import android.support.v4.widget.SwipeRefreshLayout
 import android.support.v7.app.AppCompatActivity
@@ -17,21 +15,24 @@ import android.view.MenuItem
 import android.view.View
 import android.widget.ProgressBar
 import com.squareup.moshi.JsonAdapter
-import droidkaigi.github.io.challenge2019.data.api.HackerNewsApi
 import droidkaigi.github.io.challenge2019.data.db.ArticlePreferences
 import droidkaigi.github.io.challenge2019.domain.Item
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.CountDownLatch
+import droidkaigi.github.io.challenge2019.domain.ItemRepository
+import kotlinx.coroutines.*
 import javax.inject.Inject
+import kotlin.coroutines.CoroutineContext
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), CoroutineScope {
+
+    private val job = Job()
+
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
 
     companion object {
         private const val STATE_STORIES = "stories"
         private const val ACTIVITY_REQUEST = 1
+        private const val SIZE_TOP_STORY_ITEMS = 20
     }
 
     private lateinit var recyclerView: RecyclerView
@@ -41,15 +42,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var storyAdapter: StoryAdapter
 
     @Inject
-    lateinit var hackerNewsApi: HackerNewsApi
-    @Inject
     lateinit var articlePreferences: ArticlePreferences
     @Inject
     lateinit var itemJsonAdapter: JsonAdapter<Item>
     @Inject
     lateinit var itemsJsonAdapter: JsonAdapter<List<Item?>>
-
-    private var getStoriesTask: AsyncTask<Long, Unit, List<Item?>>? = null
+    @Inject
+    lateinit var itemRepository: ItemRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -77,24 +76,7 @@ class MainActivity : AppCompatActivity() {
                         clipboard.primaryClip = ClipData.newPlainText("url", item.url)
                     }
                     R.id.refresh -> {
-                        hackerNewsApi.getItem(item.id).enqueue(object : Callback<Item> {
-                            override fun onResponse(call: Call<Item>, response: Response<Item>) {
-                                response.body()?.let { newItem ->
-                                    val index = storyAdapter.stories.indexOf(item)
-                                    if (index == -1 ) return
-
-                                    storyAdapter.stories[index] = newItem
-                                    runOnUiThread {
-                                        storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
-                                        storyAdapter.notifyItemChanged(index)
-                                    }
-                                }
-                            }
-
-                            override fun onFailure(call: Call<Item>, t: Throwable) {
-                                showError(t)
-                            }
-                        })
+                        loadStory(item)
                     }
                 }
             },
@@ -122,60 +104,40 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadTopStories() {
-        hackerNewsApi.getTopStories().enqueue(object : Callback<List<Long>> {
-
-            override fun onResponse(call: Call<List<Long>>, response: Response<List<Long>>) {
-                if (!response.isSuccessful) return
-
-                response.body()?.let { itemIds ->
-                    getStoriesTask = @SuppressLint("StaticFieldLeak") object : AsyncTask<Long, Unit, List<Item?>>() {
-
-                        override fun doInBackground(vararg itemIds: Long?): List<Item?> {
-                            val ids = itemIds.mapNotNull { it }
-                            val itemMap = ConcurrentHashMap<Long, Item?>()
-                            val latch = CountDownLatch(ids.size)
-
-                            ids.forEach { id ->
-                                hackerNewsApi.getItem(id).enqueue(object : Callback<Item> {
-                                    override fun onResponse(call: Call<Item>, response: Response<Item>) {
-                                        response.body()?.let { item -> itemMap[id] = item }
-                                        latch.countDown()
-                                    }
-
-                                    override fun onFailure(call: Call<Item>, t: Throwable) {
-                                        showError(t)
-                                        latch.countDown()
-                                    }
-                                })
-                            }
-
-                            try {
-                                latch.await()
-                            } catch (e: InterruptedException) {
-                                showError(e)
-                                return emptyList()
-                            }
-
-                            return ids.map { itemMap[it] }
-                        }
-
-                        override fun onPostExecute(items: List<Item?>) {
-                            progressView.visibility = View.GONE
-                            swipeRefreshLayout.isRefreshing = false
-                            storyAdapter.stories = items.toMutableList()
-                            storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
-                            storyAdapter.notifyDataSetChanged()
-                        }
-                    }
-
-                    getStoriesTask?.execute(*itemIds.take(20).toTypedArray())
+        launch {
+            try {
+                val items = withContext(Dispatchers.Default) {
+                    itemRepository.getTopStories(SIZE_TOP_STORY_ITEMS)
                 }
+                progressView.visibility = View.GONE
+                swipeRefreshLayout.isRefreshing = false
+                storyAdapter.stories = items.toMutableList()
+                storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
+                storyAdapter.notifyDataSetChanged()
+            } catch (e: Exception) {
+                showError(e) // TODO: error handling
             }
+        }
+    }
 
-            override fun onFailure(call: Call<List<Long>>, t: Throwable) {
-                showError(t)
+    private fun loadStory(item: Item) {
+        launch {
+            try {
+                val newItem = withContext(Dispatchers.Default) {
+                    itemRepository.getItem(item.id)
+                }
+                val index = storyAdapter.stories.indexOf(item)
+                if (index > 0) {
+                    storyAdapter.stories[index] = newItem
+                    runOnUiThread {
+                        storyAdapter.alreadyReadStories = articlePreferences.getArticleIds()
+                        storyAdapter.notifyItemChanged(index)
+                    }
+                }
+            } catch (e: Exception) {
+                showError(e) // TODO: error handling
             }
-        })
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -223,8 +185,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        getStoriesTask?.run {
-            if (!isCancelled) cancel(true)
-        }
+        job.cancel()
     }
 }

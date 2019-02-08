@@ -17,16 +17,19 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import com.squareup.moshi.JsonAdapter
-import droidkaigi.github.io.challenge2019.data.api.HackerNewsApi
 import droidkaigi.github.io.challenge2019.domain.Item
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import java.util.concurrent.ConcurrentHashMap
+import droidkaigi.github.io.challenge2019.domain.ItemRepository
+import kotlinx.coroutines.*
 import java.util.concurrent.CountDownLatch
 import javax.inject.Inject
+import kotlin.coroutines.CoroutineContext
 
-class StoryActivity : AppCompatActivity() {
+class StoryActivity : AppCompatActivity(), CoroutineScope {
+
+    private val job = Job()
+
+    override val coroutineContext: CoroutineContext
+        get() = Dispatchers.Main + job
 
     companion object {
         const val EXTRA_ITEM_JSON = "droidkaigi.github.io.challenge2019.EXTRA_ITEM_JSON"
@@ -41,13 +44,12 @@ class StoryActivity : AppCompatActivity() {
     private lateinit var commentAdapter: CommentAdapter
 
     @Inject
-    lateinit var hackerNewsApi: HackerNewsApi
-    @Inject
     lateinit var itemJsonAdapter: JsonAdapter<Item>
     @Inject
     lateinit var itemsJsonAdapter: JsonAdapter<List<Item?>>
+    @Inject
+    lateinit var itemRepository: ItemRepository
 
-    private var getCommentsTask: AsyncTask<Long, Unit, List<Item?>>? = null
     private var hideProgressTask: AsyncTask<Unit, Unit, Unit>? = null
 
     private var item: Item? = null
@@ -123,43 +125,22 @@ class StoryActivity : AppCompatActivity() {
         }
         webView.loadUrl(item!!.url)
 
-        getCommentsTask = @SuppressLint("StaticFieldLeak") object : AsyncTask<Long, Unit, List<Item?>>() {
-            override fun doInBackground(vararg itemIds: Long?): List<Item?> {
-                val ids = itemIds.mapNotNull { it }
-                val itemMap = ConcurrentHashMap<Long, Item?>()
-                val latch = CountDownLatch(ids.size)
+        loadItems(item!!.kids, progressLatch)
+    }
 
-                ids.forEach { id ->
-                    hackerNewsApi.getItem(id).enqueue(object : Callback<Item> {
-                        override fun onResponse(call: Call<Item>, response: Response<Item>) {
-                            response.body()?.let { item -> itemMap[id] = item }
-                            latch.countDown()
-                        }
-
-                        override fun onFailure(call: Call<Item>, t: Throwable) {
-                            latch.countDown()
-                            showError(t)
-                        }
-                    })
+    private fun loadItems(ids: List<Long>, progressLatch: CountDownLatch) {
+        launch {
+            try {
+                val items = withContext(Dispatchers.Default) {
+                    itemRepository.getItems(ids)
                 }
-
-                try {
-                    latch.await()
-                } catch (e: InterruptedException) {
-                    return emptyList()
-                }
-
-                return ids.map { itemMap[it] }
-            }
-
-            override fun onPostExecute(items: List<Item?>) {
-                progressLatch.countDown()
                 commentAdapter.comments = items
                 commentAdapter.notifyDataSetChanged()
+            } catch (e: Exception) {
+                showError(e) // TODO: error handling
             }
+            progressLatch.countDown()
         }
-
-        getCommentsTask?.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, *item!!.kids.toTypedArray())
     }
 
     override fun onOptionsItemSelected(item: MenuItem?): Boolean {
@@ -200,9 +181,7 @@ class StoryActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        getCommentsTask?.run {
-            if (!isCancelled) cancel(true)
-        }
+        job.cancel()
         hideProgressTask?.run {
             if (!isCancelled) cancel(true)
         }
